@@ -37,6 +37,8 @@ This is an ongoing project to build a standalone table-top music player with hea
 
 I started redoing the main event loop so the code is currently somewhat borked.
 
+![](Photos/2020-01-29.jpg)
+
 ## Wiring
 
 ```

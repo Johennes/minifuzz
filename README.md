@@ -27,13 +27,14 @@ This is an ongoing project to build a standalone table-top music player with hea
   - [ ] Case
 - [ ] UI
   - [x] Playback screen
-    - [x] Current track info (artist, album, title)
-    - [x] Cover view
-    - [x] Track progress bar
-    - [x] Volume meter
-    - [x] Playback controls
+     - [x] Current track info (artist, album, title)
+     - [x] Cover view
+     - [x] Track progress bar
+     - [x] Volume meter
+     - [x] Playback controls
   - [ ] Library screen
   - [ ] Playlist screen
+  - [ ] Screen transitions
 
 I started redoing the main event loop so the code is currently somewhat borked.
 

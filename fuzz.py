@@ -77,7 +77,7 @@ class DisplayDriver(object):
 
 
 ##
-# App / Widget Kit
+# Serial Queue
 ##
 
 class SerialQueue(object):
@@ -100,6 +100,10 @@ class SerialQueue(object):
     def run_async(self, task):
         self._queue.put(task)
 
+
+##
+# App / Widget Kit
+##
 
 class App(object):
 
@@ -130,8 +134,8 @@ class Controller(object):
 
     def __init__(self, window, navigator, logger):
         self.window = window
-        self.logger = logger
         self.navigator = navigator
+        self.logger = logger
 
     def push(self, controller):
         self.navigator.push(controller)
@@ -499,7 +503,7 @@ class PreviousNextIcon(Widget):
             (transform(x0 + barWidth - 1), y1)], fill=self._color)
 
 
-class ToolbarButtonIcon(Enum):
+class ToolbarButtonType(Enum):
 
     PLAY_PAUSE = 1
     PREVIOUS = 2
@@ -508,7 +512,7 @@ class ToolbarButtonIcon(Enum):
 
 class ToolbarButton(Widget):
 
-    def __init__(self, frame, icon, theme, text=""):
+    def __init__(self, button_type, frame, theme, text=""):
         super().__init__(frame)
 
         self.label = TextWidget(
@@ -521,11 +525,11 @@ class ToolbarButton(Widget):
 
         iconFrame = Frame(frame.x0, frame.y0 + 22, frame.x1, frame.y1)
 
-        if icon == ToolbarButtonIcon.PLAY_PAUSE:
+        if button_type == ToolbarButtonType.PLAY_PAUSE:
             self.icon = PlayPauseIcon(frame=iconFrame, color=theme.mainColor, play=False)
-        elif icon == ToolbarButtonIcon.PREVIOUS:
+        elif button_type == ToolbarButtonType.PREVIOUS:
             self.icon = PreviousNextIcon(frame=iconFrame, color=theme.mainColor, previous=True)
-        elif icon == ToolbarButtonIcon.NEXT:
+        elif button_type == ToolbarButtonType.NEXT:
             self.icon = PreviousNextIcon(frame=iconFrame, color=theme.mainColor, previous=False)
 
         self.children.append(self.icon)
@@ -596,22 +600,22 @@ class PlayingWindow(Window):
         self.add_widget(HRule(279, 240, theme.mainColor))
 
         self.previousButton = ToolbarButton(
+            button_type=ToolbarButtonType.PREVIOUS,
             frame=Frame(0, 280, 79, 319),
-            icon=ToolbarButtonIcon.PREVIOUS,
             theme=self.theme,
             text="Previous")
         self.add_widget(self.previousButton)
 
         self.playPauseButton = ToolbarButton(
+            button_type=ToolbarButtonType.PLAY_PAUSE,
             frame=Frame(80, 280, 159, 319),
-            icon=ToolbarButtonIcon.PLAY_PAUSE,
             theme=self.theme,
             text="Pause")
         self.add_widget(self.playPauseButton)
 
         self.nextButton = ToolbarButton(
+            button_type=ToolbarButtonType.NEXT,
             frame=Frame(160, 280, 239, 319),
-            icon=ToolbarButtonIcon.NEXT,
             theme=self.theme,
             text="Next")
         self.add_widget(self.nextButton)
@@ -637,7 +641,7 @@ class PlayingWindowController(Controller):
         mpd.mixerListeners.append(self)
         mpd.playerListeners.append(self)
 
-        Timer(2, lambda: navigator.push(LibraryWindowController(theme, driver, navigator, logger, mpd))).start()
+        #Timer(2, lambda: navigator.push(LibraryWindowController(theme, driver, navigator, logger, mpd))).start()
 
     def __del__(self):
         self.mpd.mixerListeners.remove(self)

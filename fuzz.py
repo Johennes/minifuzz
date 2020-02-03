@@ -187,6 +187,8 @@ class Window(object):
 
     def _draw(self, widgets):
         for widget in widgets:
+            if widget.hidden:
+                continue
             if widget.needsRedraw:
                 self._logger.log_info("Drawing widget %s" % widget)
                 widget.draw(self._layer, self._context)
@@ -234,6 +236,7 @@ class Widget(object):
         self.frame = frame
         self.wasDrawnOnce = False
         self.needsRedraw = True
+        self.hidden = False
         self.children = []
 
     def draw(self, layer, context):
@@ -695,11 +698,13 @@ class PlayingWindowController(Controller):
             self.window.artistLabel.text = song.artist
             self.window.titleLabel.text = song.title
             self.window.albumLabel.text = "%s (%s)" % (song.album, song.date) if song.album else None
+            self.window.progressBar.hidden = False
         else:
             self.window.cover.image = None
             self.window.artistLabel.text = None
             self.window.titleLabel.text = None
-            self.window.albumLabel.text = None            
+            self.window.albumLabel.text = None
+            self.window.progressBar.hidden = True
 
     def _load_cover(self, path):
         if not path:

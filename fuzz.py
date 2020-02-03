@@ -658,10 +658,6 @@ class PlayingWindowController(Controller):
 
         self._progressTimer = None
 
-        self._update_current_song()
-        self._update_volume()
-        self._update_state_and_progress()
-
         mpd.mixerListeners.append(self)
         mpd.playerListeners.append(self)
 
@@ -671,7 +667,13 @@ class PlayingWindowController(Controller):
 
     def will_appear(self):
         super().will_appear()
+
+        self._update_current_song()
+        self._update_volume()
+        self._update_state_and_progress()
+
         self.mpd.start_idling()
+
         controller = LibraryWindowController(self.theme, self.driver, self.navigator, self.logger, self.mpd)
         Timer(3, lambda: self.navigator.push(controller)).start()
 
@@ -885,8 +887,6 @@ class MpdService(object):
         self.playerListeners = []
         self._queue = SerialQueue("MPD")
         self._queue.run_async(lambda: self._client.connect(host, port))
-        self._queue.run_async(lambda: self._update_status())
-        self._queue.run_async(lambda: self._update_current_song())
 
     def __del__(self):
         self._client.disconnect()
@@ -898,6 +898,11 @@ class MpdService(object):
         self._break_idle_loop = True
 
     def _idle(self):
+        if self._update_status():
+            self._notify_mixer_listeners()
+        if self._update_current_song():
+            self._notify_player_listeners()
+
         idling = False
         while self._client:
             if not idling:
@@ -925,13 +930,17 @@ class MpdService(object):
                 self._notify_player_listeners()
 
     def _update_status(self):
+        old = self._status
         self._status = self._client.status()
+        return old != self._status
 
     def _update_current_song(self):
+        old = self._currentSong
         if "songid" in self._status:
             self._currentSong = self._client.playlistid(self._status["songid"])[0]
         else:
             self._currentSong = None
+        return old != self._currentSong
 
     def _notify_mixer_listeners(self):
         for listener in self.mixerListeners:

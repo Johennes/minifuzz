@@ -34,7 +34,7 @@ This is an ongoing project to build a standalone table-top music player with hea
      - [x] Playback controls
   - [ ] Library screen
   - [ ] Playlist screen
-  - [ ] Screen transitions
+  - [x] Screen transitions
 
 ![](Photos/2020-01-29.jpg)
 

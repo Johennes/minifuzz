@@ -112,6 +112,7 @@ class App(object):
         self._queue = SerialQueue("main")
 
     def run(self):
+        self.controllers[-1].will_appear()
         Thread(target=self._iterate).start()
 
     def _iterate(self):
@@ -127,6 +128,8 @@ class App(object):
         self._queue.run_async(lambda: self._push(controller))
 
     def _push(self, controller):
+        if self.controllers:
+            self.controllers[-1].will_disappear()
         self.controllers.append(controller)
         controller.will_appear()
 
@@ -134,8 +137,10 @@ class App(object):
         self._queue.run_async(self._pop)
 
     def _pop(self):
-        last = self.controllers.pop()
-        last.will_disappear()
+        current = self.controllers.pop()
+        current.will_disappear()
+        if self.controllers:
+            self.controllers[-1].will_appear()
 
 
 class Controller(object):
@@ -152,10 +157,11 @@ class Controller(object):
         self.navigator.pop()
 
     def will_appear(self):
-        pass
+        self.logger.log_info('%s will appear' % self)
 
     def will_disappear(self):
-        pass
+        self.logger.log_info('%s will disappear' % self)
+        self.window.wasDisplayedOnce = False
 
 
 class Window(object):
@@ -640,6 +646,10 @@ class PlayingWindowController(Controller):
     def __init__(self, theme, driver, navigator, logger, network, mpd):
         super().__init__(PlayingWindow(theme, driver, logger), navigator, logger)
 
+        self.theme = theme
+        self.driver = driver
+        self.navigator = navigator
+        self.logger = logger
         self.network = network
         self.mpd = mpd
 
@@ -655,8 +665,6 @@ class PlayingWindowController(Controller):
         mpd.mixerListeners.append(self)
         mpd.playerListeners.append(self)
 
-        Timer(2, lambda: navigator.push(LibraryWindowController(theme, driver, navigator, logger, mpd))).start()
-
     def __del__(self):
         self.mpd.mixerListeners.remove(self)
         self.mpd.playerListeners.remove(self)
@@ -664,9 +672,11 @@ class PlayingWindowController(Controller):
     def will_appear(self):
         super().will_appear()
         self.mpd.start_idling()
+        controller = LibraryWindowController(self.theme, self.driver, self.navigator, self.logger, self.mpd)
+        Timer(3, lambda: self.navigator.push(controller)).start()
 
     def will_disappear(self):
-        super.will_disappear()
+        super().will_disappear()
         self.mpd.stop_idling()
 
     def on_mixer_changed(self):
@@ -774,9 +784,12 @@ class LibraryWindowController(Controller):
 
     def __init__(self, theme, driver, navigator, logger, mpd):
         super().__init__(LibraryWindow(theme, driver, logger), navigator, logger)
+        self.mpd = mpd
 
-        artists = mpd.get_artists()
-        print(artists)
+    def will_appear(self):
+        super().will_appear()
+        self.mpd.fetch_artists(lambda artists: print(artists))
+        Timer(3, self.navigator.pop).start()
 
 
 ##
@@ -992,12 +1005,8 @@ class MpdService(object):
 
     duration = property(get_duration)
 
-    def get_artists(self):
-        result = [None]
-        def task():
-            result[0] = self._client.list("albumartist")
-        self._queue.run_sync(task)
-        return result[0]
+    def fetch_artists(self, on_finished):
+        self._queue.run_async(lambda: on_finished(self._client.list("albumartist")))
 
 
 

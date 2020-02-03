@@ -641,7 +641,7 @@ class PlayingWindowController(Controller):
         mpd.mixerListeners.append(self)
         mpd.playerListeners.append(self)
 
-        #Timer(2, lambda: navigator.push(LibraryWindowController(theme, driver, navigator, logger, mpd))).start()
+        Timer(2, lambda: navigator.push(LibraryWindowController(theme, driver, navigator, logger, mpd))).start()
 
     def __del__(self):
         self.mpd.mixerListeners.remove(self)
@@ -753,7 +753,9 @@ class LibraryWindowController(Controller):
     def __init__(self, theme, driver, navigator, logger, mpd):
         super().__init__(LibraryWindow(theme, driver, logger), navigator, logger)
 
-        print(mpd.get_artists())
+        mpd.stop_idling()
+        artists = mpd.get_artists()
+        print(artists)
 
 
 ##
@@ -842,17 +844,26 @@ class MpdService(object):
     def __init__(self, logger, host="localhost", port=6600):
         self._logger = logger
         self._client = MPDClient()
-        self._client.connect(host, port)
-        self._update_status()
-        self._update_current_song()
+        self._status = None
+        self._currentSong = None
+        self._break_idle_loop = False
         self.mixerListeners = []
         self.playerListeners = []
-        self.stop_idling = False
+        self._queue = SerialQueue("MPD")
+        self._queue.run_async(lambda: self._client.connect(host, port))
+        self._queue.run_async(lambda: self._update_status())
+        self._queue.run_async(lambda: self._update_current_song())
 
     def __del__(self):
         self._client.disconnect()
 
-    def idle(self):
+    def start_idling(self):
+        self._queue.run_async(self._idle)
+
+    def stop_idling(self):
+        self._break_idle_loop = True
+
+    def _idle(self):
         idling = False
         while self._client:
             if not idling:
@@ -864,7 +875,7 @@ class MpdService(object):
             if ready:
                 self._handle_events(self._client.fetch_idle())
                 idling = False
-            if self.stop_idling:
+            if self._break_idle_loop:
                 self._logger.log_info("Stopping MPD idle")
                 self._client.noidle()
                 break
@@ -897,11 +908,15 @@ class MpdService(object):
             listener.on_player_changed()
 
     def get_volume(self):
+        if not self._status:
+            return 0
         return int(self._status["volume"])
 
     volume = property(get_volume)
 
     def get_state(self):
+        if not self._status:
+            return MpdState.STOPPED
         stateString = self._status["state"]
         if stateString == "play":
             return MpdState.PLAYING
@@ -913,6 +928,8 @@ class MpdService(object):
     state = property(get_state)
 
     def get_current_song(self):
+        if not self._currentSong:
+            return None
         return MpdSong(
             artist=self._get_current_song_artist(),
             album=self._get_current_song_album(),
@@ -955,10 +972,11 @@ class MpdService(object):
     duration = property(get_duration)
 
     def get_artists(self):
-        # TODO: This is crap
-        self.stop_idling = True
-        sleep(2)
-        return self._client.list("albumartist")
+        result = [None]
+        def task():
+            result[0] = self._client.list("albumartist")
+        self._queue.run_sync(task)
+        return result[0]
 
 
 
@@ -977,4 +995,4 @@ app = PlayerApp(theme, driver, logger, network, mpd)
 app.run()
 
 
-mpd.idle()
+mpd.start_idling()

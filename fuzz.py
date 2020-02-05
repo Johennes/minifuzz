@@ -11,6 +11,7 @@ from subprocess import Popen, PIPE
 from threading import currentThread, Thread, Timer
 from time import sleep, time
 
+from Adafruit_ADS1x15 import ADS1115
 from adafruit_rgb_display import color565
 from adafruit_rgb_display.ili9341 import ILI9341
 from board import SCK, MOSI, MISO, D8, D24, D25
@@ -920,8 +921,9 @@ class MpdService(object):
                 self._handle_events(self._client.fetch_idle())
                 idling = False
             if self._break_idle_loop:
-                self._logger.log_info("Stopping MPD idle")
-                self._client.noidle()
+                if idling:
+                    self._logger.log_info("Stopping MPD idle")
+                    self._client.noidle()
                 break
 
     def _handle_events(self, events):
@@ -960,7 +962,15 @@ class MpdService(object):
             return 0
         return int(self._status["volume"])
 
-    volume = property(get_volume)
+    def set_volume(self, value):
+        self._queue.run_async(lambda: self._change_volume(value))
+
+    def _change_volume(self, value):
+        self._client.setvol(value)
+        if self._update_status():
+            self._notify_mixer_listeners()
+
+    volume = property(get_volume, set_volume)
 
     def get_state(self):
         if not self._status:
@@ -1023,6 +1033,36 @@ class MpdService(object):
         self._queue.run_async(lambda: on_finished(self._client.list("albumartist")))
 
 
+##
+# Volume Monitor
+##
+
+class VolumeMonitor(object):
+
+    def __init__(self, logger, mpd):
+        self._logger = logger
+        self._mpd = mpd
+        self._adc = ADS1115()
+        self._last_value = None
+        self._max_value = 32767 * 3.3 / 4.096
+        self._stop = False
+
+    def start(self):
+        Thread(target=self._iterate, name="Volume Monitor").start()
+
+    def stop(self):
+        self._stop = True
+
+    def _iterate(self):
+        while not self._stop:
+            new_value = self._adc.read_adc(0, gain=1)
+            if not self._last_value or abs(new_value - self._last_value) >= self._max_value / 100:
+                self._last_value = new_value
+                percentage = max(0, min(100, round(new_value / self._max_value * 100)))
+                self._logger.log_info("Volume slider changed to %.0f%%" % percentage)
+                self._mpd.volume = percentage
+            sleep(0.2)
+
 
 ##
 # Main
@@ -1034,6 +1074,8 @@ driver = DisplayDriver(logger)
 network = NetworkService(logger)
 mpd = MpdService(logger)
 
-app = PlayerApp(theme, driver, logger, network, mpd)
+volumeMonitor = VolumeMonitor(logger, mpd)
+volumeMonitor.start()
 
+app = PlayerApp(theme, driver, logger, network, mpd)
 app.run()

@@ -18,7 +18,7 @@ from board import SCK, MOSI, MISO, D8, D24, D25
 from busio import SPI
 from digitalio import DigitalInOut
 from mpd import MPDClient
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont 
 
 
 ##
@@ -647,7 +647,7 @@ class PlayingWindow(Window):
 
 class PlayingWindowController(Controller):
 
-    def __init__(self, theme, driver, navigator, logger, network, mpd):
+    def __init__(self, theme, driver, navigator, logger, network, mpdMonitor, mpdService):
         super().__init__(PlayingWindow(theme, driver, logger), navigator, logger)
 
         self.theme = theme
@@ -655,19 +655,20 @@ class PlayingWindowController(Controller):
         self.navigator = navigator
         self.logger = logger
         self.network = network
-        self.mpd = mpd
+        self.mpdMonitor = mpdMonitor
+        self.mpdService = mpdService
 
         self.window.ipLabel.text = network.ip
         self.window.ssidLabel.text = network.ssid
 
         self._progressTimer = None
 
-        mpd.mixerListeners.append(self)
-        mpd.playerListeners.append(self)
+        mpdMonitor.mixerListeners.append(self)
+        mpdMonitor.playerListeners.append(self)
 
     def __del__(self):
-        self.mpd.mixerListeners.remove(self)
-        self.mpd.playerListeners.remove(self)
+        self.mpdMonitor.mixerListeners.remove(self)
+        self.mpdMonitor.playerListeners.remove(self)
 
     def will_appear(self):
         super().will_appear()
@@ -676,14 +677,14 @@ class PlayingWindowController(Controller):
         self._update_volume()
         self._update_state_and_progress()
 
-        self.mpd.start_idling()
+        self.mpdMonitor.start()
 
-        controller = LibraryWindowController(self.theme, self.driver, self.navigator, self.logger, self.mpd)
+        controller = LibraryWindowController(self.theme, self.driver, self.navigator, self.logger, self.mpdService)
         Timer(3, lambda: self.navigator.push(controller)).start()
 
     def will_disappear(self):
         super().will_disappear()
-        self.mpd.stop_idling()
+        self.mpdMonitor.stop()
 
     def on_mixer_changed(self):
         self._update_volume()
@@ -693,7 +694,7 @@ class PlayingWindowController(Controller):
         self._update_state_and_progress()
 
     def _update_current_song(self):
-        song = self.mpd.currentSong
+        song = self.mpdMonitor.currentSong
         if song:
             self.window.cover.image = self._load_cover(song.path)
             self.window.artistLabel.text = song.artist
@@ -733,12 +734,12 @@ class PlayingWindowController(Controller):
         self.logger.log_error("Could not find cover for %s" % path)
 
     def _update_volume(self):
-        self.window.volumeBar.volume = self.mpd.volume
+        self.window.volumeBar.volume = self.mpdMonitor.volume
 
     def _update_state_and_progress(self):
-        state = self.mpd.state
+        state = self.mpdMonitor.state
         if state == MpdState.PLAYING:
-            self._start_progress_timer(self.mpd.elapsed, self.mpd.duration)
+            self._start_progress_timer(self.mpdMonitor.elapsed, self.mpdMonitor.duration)
             self.window.playPauseButton.icon.play = False
             self.window.playPauseButton.label.text = "Pause"
         elif state == MpdState.PAUSED or state == MpdState.STOPPED:
@@ -790,13 +791,13 @@ class LibraryWindow(Window):
 
 class LibraryWindowController(Controller):
 
-    def __init__(self, theme, driver, navigator, logger, mpd):
+    def __init__(self, theme, driver, navigator, logger, mpdService):
         super().__init__(LibraryWindow(theme, driver, logger), navigator, logger)
-        self.mpd = mpd
+        self.mpdService = mpdService
 
     def will_appear(self):
         super().will_appear()
-        self.mpd.fetch_artists(lambda artists: print(artists))
+        self.mpdService.fetch_artists(lambda artists: print(artists))
         Timer(3, self.navigator.pop).start()
 
 
@@ -806,8 +807,8 @@ class LibraryWindowController(Controller):
 
 class PlayerApp(App):
 
-    def __init__(self, theme, driver, logger, network, mpd):
-        super().__init__(PlayingWindowController(theme, driver, self, logger, network, mpd))
+    def __init__(self, theme, driver, logger, network, mpdMonitor, mpdService):
+        super().__init__(PlayingWindowController(theme, driver, self, logger, network, mpdMonitor, mpdService))
 
 
 ##
@@ -864,6 +865,30 @@ class NetworkService(object):
 # MPD Service
 ##
 
+class MpdService(object):
+
+    def __init__(self, logger, host="localhost", port=6600):
+        self._logger = logger
+        self._client = MPDClient()
+        self._queue = SerialQueue("MPD")
+        self._queue.run_async(lambda: self._client.connect(host, port))
+
+    def __del__(self):
+        self._queue.run_async(lambda: self._client.disconnect())
+
+    def change_volume(self, value):
+        self._logger.log_info("Changing volume to %i%%" % value)
+        self._queue.run_async(lambda: self._client.setvol(value))
+
+    def fetch_artists(self, on_finished):
+        self._logger.log_info("Fetching artists")
+        self._queue.run_async(lambda: on_finished(self._client.list("albumartist")))
+
+
+##
+# MPD Monitor
+##
+
 class MpdState(Enum):
 
     PLAYING = 1
@@ -881,27 +906,27 @@ class MpdSong(object):
         self.path = path
 
 
-class MpdService(object):
+class MpdMonitor(object):
 
     def __init__(self, logger, host="localhost", port=6600):
         self._logger = logger
         self._client = MPDClient()
         self._status = None
         self._currentSong = None
-        self._break_idle_loop = False
+        self._stop = False
         self.mixerListeners = []
         self.playerListeners = []
-        self._queue = SerialQueue("MPD")
+        self._queue = SerialQueue("MPD Monitor")
         self._queue.run_async(lambda: self._client.connect(host, port))
 
     def __del__(self):
-        self._client.disconnect()
+        self._queue.run_async(lambda: self._client.disconnect())
 
-    def start_idling(self):
+    def start(self):
         self._queue.run_async(self._idle)
 
-    def stop_idling(self):
-        self._break_idle_loop = True
+    def stop(self):
+        self._stop = True
 
     def _idle(self):
         if self._update_status():
@@ -916,18 +941,18 @@ class MpdService(object):
                 self._client.send_idle()
                 idling = True
             ready, _, _ = select([self._client], [], [], 1)
-            self._logger.log_info("MPD idle loop interrupted with data available on %s" % ready)
             if ready:
+                self._logger.log_info("MPD idle loop interrupted with data available on %s" % ready)
                 self._handle_events(self._client.fetch_idle())
                 idling = False
-            if self._break_idle_loop:
+            if self._stop:
+                self._stop = False
                 if idling:
                     self._logger.log_info("Stopping MPD idle")
                     self._client.noidle()
                 break
 
     def _handle_events(self, events):
-        self._logger.log_info("Reading MPD status after events %s" % events)
         self._update_status()
         for event in events:
             if event == "mixer":
@@ -962,15 +987,7 @@ class MpdService(object):
             return 0
         return int(self._status["volume"])
 
-    def set_volume(self, value):
-        self._queue.run_async(lambda: self._change_volume(value))
-
-    def _change_volume(self, value):
-        self._client.setvol(value)
-        if self._update_status():
-            self._notify_mixer_listeners()
-
-    volume = property(get_volume, set_volume)
+    volume = property(get_volume)
 
     def get_state(self):
         if not self._status:
@@ -1029,9 +1046,6 @@ class MpdService(object):
 
     duration = property(get_duration)
 
-    def fetch_artists(self, on_finished):
-        self._queue.run_async(lambda: on_finished(self._client.list("albumartist")))
-
 
 ##
 # Volume Monitor
@@ -1039,16 +1053,17 @@ class MpdService(object):
 
 class VolumeMonitor(object):
 
-    def __init__(self, logger, mpd):
+    def __init__(self, logger, mpdService):
         self._logger = logger
-        self._mpd = mpd
+        self._mpdService = mpdService
         self._adc = ADS1115()
         self._last_value = None
         self._max_value = 32767 * 3.3 / 4.096
         self._stop = False
+        self._queue = SerialQueue("Volume Monitor")
 
     def start(self):
-        Thread(target=self._iterate, name="Volume Monitor").start()
+        self._queue.run_async(self._iterate)
 
     def stop(self):
         self._stop = True
@@ -1059,8 +1074,8 @@ class VolumeMonitor(object):
             if not self._last_value or abs(new_value - self._last_value) >= self._max_value / 100:
                 self._last_value = new_value
                 percentage = max(0, min(100, round(new_value / self._max_value * 100)))
-                self._logger.log_info("Volume slider changed to %.0f%%" % percentage)
-                self._mpd.volume = percentage
+                self._logger.log_info("Volume slider changed to %i%%" % percentage)
+                self._mpdService.change_volume(percentage)
             sleep(0.2)
 
 
@@ -1072,10 +1087,12 @@ logger = Logger()
 theme = Theme()
 driver = DisplayDriver(logger)
 network = NetworkService(logger)
-mpd = MpdService(logger)
 
-volumeMonitor = VolumeMonitor(logger, mpd)
+mpdMonitor = MpdMonitor(logger)
+mpdService = MpdService(logger)
+
+volumeMonitor = VolumeMonitor(logger, mpdService)
 volumeMonitor.start()
 
-app = PlayerApp(theme, driver, logger, network, mpd)
+app = PlayerApp(theme, driver, logger, network, mpdMonitor, mpdService)
 app.run()

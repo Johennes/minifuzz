@@ -41,8 +41,6 @@ This is an ongoing project to build a standalone table-top music player with hea
   - [ ] Library screen
   - [ ] Playlist screen
   - [x] Screen transitions
-- [ ] Other
-  - [ ] Allow MPD idling to be interrupted by command
 
 ![](Photos/2020-01-29.jpg)
 

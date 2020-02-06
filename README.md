@@ -42,7 +42,7 @@ This is an ongoing project to build a standalone table-top music player with hea
   - [ ] Playlist screen
   - [x] Screen transitions
 
-![](Photos/2020-01-29.jpg)
+![](Photos/2020-01-29.jpg) ![](Photos/2020-02-06.jpg)
 
 ## Wiring
 

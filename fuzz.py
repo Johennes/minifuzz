@@ -716,8 +716,10 @@ class PlayingWindowController(Controller):
         if not isfile(fullPath):
             fullPath = "/mnt/%s" % path
             if not isfile(fullPath):
-                self.logger.log_error("Could not find cover for %s" % path)
-                return None
+                fullPath = path.replace("USB/", "/media/")
+                if not isfile(fullPath):
+                    self.logger.log_error("Could not find directory to load cover for %s" % path)
+                    return None
 
         directory = dirname(fullPath)
         

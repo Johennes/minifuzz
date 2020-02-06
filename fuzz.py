@@ -699,7 +699,8 @@ class PlayingWindowController(Controller):
             self.window.cover.image = self._load_cover(song.path)
             self.window.artistLabel.text = song.artist
             self.window.titleLabel.text = song.title
-            self.window.albumLabel.text = "%s (%s)" % (song.album, song.date) if song.album else None
+            year = song.date[:4] if song.date and len(song.date) > 4 else song.date
+            self.window.albumLabel.text = "%s (%s)" % (song.album, year) if song.album else None
             self.window.progressBar.hidden = False
         else:
             self.window.cover.image = None

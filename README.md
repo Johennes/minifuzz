@@ -1,5 +1,7 @@
 # Mini Fuzz
 
+*Mirrors: [GitHub] ~ [GitLab]*
+
 This is an ongoing project to build a standalone table-top music player with headphone output.
 
 ## Goals
@@ -193,3 +195,6 @@ Button 1      Button 2      Button 3      Button 4
 Mini Fuzz is licensed under the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 
 The Inconsolata font is subject to the Open Font License.
+
+[GitHub]: https://github.com/Johennes/minifuzz
+[GitLab]: https://gitlab.com/cherrypicker/minifuzz

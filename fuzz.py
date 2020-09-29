@@ -18,7 +18,8 @@ from board import SCK, MOSI, MISO, D8, D24, D25
 from busio import SPI
 from digitalio import DigitalInOut
 from mpd import MPDClient
-from PIL import Image, ImageDraw, ImageFont 
+from PIL import Image, ImageDraw, ImageFont
+from RPi import GPIO
 
 
 ##
@@ -1094,8 +1095,17 @@ network = NetworkService(logger)
 mpdMonitor = MpdMonitor(logger)
 mpdService = MpdService(logger)
 
-volumeMonitor = VolumeMonitor(logger, mpdService)
-volumeMonitor.start()
+# volumeMonitor = VolumeMonitor(logger, mpdService)
+# volumeMonitor.start()
 
-app = PlayerApp(theme, driver, logger, network, mpdMonitor, mpdService)
-app.run()
+# app = PlayerApp(theme, driver, logger, network, mpdMonitor, mpdService)
+# app.run()
+
+def button_callback(foo):
+    print("HERE I AM")
+    print(foo)
+
+#GPIO.setmode(GPIO.BOARD) # Use physical pin numbering
+GPIO.setup(22, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.add_event_detect(22, GPIO.FALLING, callback=button_callback)#, bouncetime=500)
+print("OK")
